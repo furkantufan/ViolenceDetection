@@ -1,0 +1,131 @@
+<html>
+<head>
+	<title>IP Webcam</title>
+	<style> 
+		.dashed {border-style:dashed;color:#3e8e41;}
+		.button:hover {background-color: #3e8e41} 
+		.button:active { background-color: #3e8e41;box-shadow: 0 5px #666; transform: translateY(4px);} 
+		.disabled {opacity: 0.6;cursor: not-allowed;}
+		.button {background-color: #4CAF50; border: none;color: white;padding: 15px 32px;text-align: center;text-decoration: none;display: inline-block;font-size: 16px;margin: 4px 2px;cursor: pointer;}
+	</style>
+</head>
+<body>
+	<center>
+		<video id="video" width="640" height="480" autoplay></video>
+	</center>
+	<br>
+	<center>
+		<br>
+		<button class="button" id="startCamera">Start Camera</button>
+		<br>
+		<h3 style="color:green" class="result"></h3>
+		<p style="color:green" class="resultDetector"></p>
+		<canvas id="canvas" width="640" height="480" style="visibility:hidden;"></canvas>
+		<table style="width:100%">
+			<tbody>
+				<tr></tr>
+			</tbody>
+		</table> 
+	</center>
+
+	<script src="https://code.jquery.com/jquery-3.2.1.js" integrity="sha256-DZAnKJ/6XZ9si04Hgrsxu/8s717jcIzLy3oi35EouyE=" crossorigin="anonymous"></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/1.7.3/socket.io.min.js"></script>
+	<script type="text/javascript">
+		var socket = io.connect('http://' + document.domain + ':' + location.port);
+		socket.on( 'connect', function(){});
+		var snapshot = document.getElementById('snapshot');
+		var video = document.getElementById('video');
+		var canvas = document.getElementById('canvas');
+		var context = canvas.getContext('2d');
+		var frames=[];
+		var maxFrames=1000;
+		var img;
+		var counter=0;
+		var counterResponse=0;
+
+		function sendFrames(){
+			if(frames.length >= 10){
+				socket.emit('Detector',{
+					data: frames
+				});
+				isReceiveResponse=false;
+				frames=[];
+			}else{
+				setTimeout(sendFrames,2000);
+			}
+		}
+		function setFrames(){
+			setTimeout(function(){ 
+				context.drawImage(video, 0, 0, 640, 480);
+				img = canvas.toDataURL("image/jpeg");
+				frames.push(img);
+				if(frames.length>=maxFrames){
+					frames.shift();
+					frames.push(img);
+					sendFrames();
+				}
+				setFrames();
+			}, 100);
+		}
+		socket.on('DetectFramesResponse',function(message){
+			$(".result").text(message.message);
+			counterResponse++;
+			console.log("Alinan cevap sayisi:"+counterResponse);
+			if(message.isDone=="true"){
+				sendFrames();
+			}
+		});
+		socket.on('Detector',function(message){
+			$(".resultDetector").append(message.message+"<br>");
+			counterResponse++;
+			console.log("Alinan cevap sayisi:"+counterResponse);
+			if(message.isDone=="true"){
+				sendFrames();
+			}
+		});
+		$(document).ready(function(){
+			$("#send").click(function(){
+				var numbers=['11','22','33','44','55'];
+				socket.emit('DetectFrames',{
+					data: numbers
+				});
+			});
+			$('#startCamera').click(function(){
+				var status=false;
+				// Kamerayi aktiflestir!
+				if(navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+					navigator.mediaDevices.getUserMedia({ video: true }).then(function(stream) {
+						//video.src = window.URL.createObjectURL(stream);
+						video.srcObject = stream;
+						video.play();
+						setFrames();
+						setTimeout(sendFrames,2000);
+					});
+				}
+				else if(navigator.getUserMedia) { // Standard
+					navigator.getUserMedia({ video: true }, function(stream) {
+						video.src = stream;
+						video.play();
+						setFrames();
+						setTimeout(sendFrames,2000);
+					}, errBack);
+				} else if(navigator.webkitGetUserMedia) { // WebKit-prefixed
+					navigator.webkitGetUserMedia({ video: true }, function(stream){
+						video.src = window.webkitURL.createObjectURL(stream);
+						video.play();
+						setFrames();
+						setTimeout(sendFrames,2000);
+					}, errBack);
+				} else if(navigator.mozGetUserMedia) { // Mozilla-prefixed
+					navigator.mozGetUserMedia({ video: true }, function(stream){
+						video.srcObject = stream;
+						video.play();
+						setFrames();
+						setTimeout(sendFrames,2000);
+					}, errBack);
+				}
+			});
+		});
+	</script>
+</body>
+</html>
